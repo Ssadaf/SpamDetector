@@ -36,13 +36,21 @@ class SpamDetector:
 
     def train(self):
         self.numSpamWords = 0
+        self.numSpamEmails = 0
         self.numHamWords = 0
+        self.numHamEmails = 0
         self.spamWords = dict()
         self.hamWords = dict()
         
         for item in self.trainData:
             label = item[0]
             text = item[1]
+            
+            if label == 'ham':
+                self.numHamEmails += 1
+            else:
+                self.numSpamEmails += 1
+            
             words = normalizeText(text)
             for word in words:
                 if label == 'ham':
@@ -55,10 +63,11 @@ class SpamDetector:
 
 
     def calcProb(self):
-        # self.probHam = self.numHamWords/
-        # self.probSpam = 0
         self.hamWordsProb = dict()
         self.spamWordsProb = dict()
+        numEmails = self.numHamEmails + self.numSpamEmails
+        self.probHam = self.numHamEmails / numEmails
+        self.probSpam = self.numSpamEmails / numEmails 
         self.numDistinctHamWords = len(list(self.hamWords.keys()))
         self.numDistinctSpamWords = len(list(self.spamWords.keys()))
 
