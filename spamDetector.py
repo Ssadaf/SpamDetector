@@ -28,40 +28,93 @@ class SpamDetector:
         stemmedWords = [stemmer.stem(w) for w in filteredWords]
         return stemmedWords
 
+    def giveSizeInterval(self, size):
+        unit = self.intervalUnit
+        if size < unit:
+            return 1
+        elif size < 2 * unit:
+            return 2
+        elif size < 3 * unit:
+            return 3
+        elif size < 4 * unit:
+            return 4
+        else:
+            return 5
+
+    def putEmailSizesInInterval(self, sizes):
+        result = dict()
+        interval, count = 1, 0
+        unit = self.intervalUnit
+
+        for size in sizes:
+            if size < interval * unit:
+                count += 1
+            else:
+                while interval < self.giveSizeInterval(size):
+                    result[interval] = count
+                    interval += 1
+                    count = 0
+        
+        while interval <= 5:
+            result[interval] = 0
+            interval += 1
+        
+        return result
+
+    def handleEmailSizes(self, hamSizes, spamSizes):
+        hamSizes.sort()
+        spamSizes.sort()
+
+        minSize = min(hamSizes[0], spamSizes[0])
+        maxSize = max(hamSizes[len(hamSizes)-1], spamSizes[len(spamSizes)-1])
+        self.intervalUnit = int((maxSize - minSize) / 4)
+        
+        self.hamEmailSizes = self.putEmailSizesInInterval(hamSizes)
+        self.spamEmailSizes = self.putEmailSizesInInterval(spamSizes)
+    
     def train(self):
-        self.numSpamWords, self.numSpamEmails, self.numHamWords, self.numHamEmails, self.numSpamDigit, self.numHamDigit = 0, 0, 0, 0, 0, 0
-        self.spamWords = dict()
-        self.hamWords = dict()
+        self.numSpamWords, self.numSpamEmails, self.numHamWords, self.numHamEmails = 0, 0, 0, 0 
+        self.numSpamDigit, self.numHamDigit, self.numSpamPhone, self.numHamPhone = 0, 0, 0, 0
+        self.spamWords, self.hamWords = dict(), dict()
+        hamEmailSizes, spamEmailSizes  = [], []
         
         for item in self.trainData:
             label = item[0]
             text = item[1]
-            
-            if label == 'ham':
-                self.numHamEmails += 1
-            else:
-                self.numSpamEmails += 1
-            
             words = self.normalizeText(text)
             for word in words:
                 if label == 'ham':
                     self.numHamWords += 1
                     if word.isdigit():
-                        self.numHamDigit += 1
+                        if word.startswith('09'):
+                            self.numHamPhone += 1
+                        else:
+                            self.numHamDigit += 1
                     else:
                         self.hamWords[word] = self.hamWords.get(word, 0) + 1     
                 else:
                     self.numSpamWords +=1
                     if word.isdigit():
-                        self.numSpamDigit += 1
+                        if word.startswith('09'):
+                            self.numSpamPhone += 1
+                        else:
+                            self.numSpamDigit += 1
                     else:
-                        self.spamWords[word] = self.spamWords.get(word, 0) + 1                
+                        self.spamWords[word] = self.spamWords.get(word, 0) + 1               
+                             
+            if label == 'ham':
+                self.numHamEmails += 1
+                hamEmailSizes.append(len(words))
+            else:
+                self.numSpamEmails += 1 
+                spamEmailSizes.append(len(words))
+
+        self.handleEmailSizes(hamEmailSizes, spamEmailSizes)
         self.calcProb()
 
 
     def calcProb(self):
-        self.hamWordsProb = dict()
-        self.spamWordsProb = dict()
+        self.hamWordsProb, self.spamWordsProb, self.hamSizeProb, self.spamSizeProb = dict(), dict(), dict(), dict()
         numEmails = self.numHamEmails + self.numSpamEmails
         self.hamEmailProb = self.numHamEmails / numEmails
         self.spamEmailProb = self.numSpamEmails / numEmails 
@@ -72,21 +125,36 @@ class SpamDetector:
             self.spamWordsProb[word] = ((self.spamWords[word] + 1) / (self.numSpamWords + self.numDistinctSpamWords))    
         for word in self.hamWords.keys():
             self.hamWordsProb[word] = ((self.hamWords[word] + 1) / (self.numHamWords + self.numDistinctHamWords))
+        for size in self.spamEmailSizes.keys():
+            self.spamSizeProb[size] = ((self.spamEmailSizes[size] + 1) / (self.numSpamEmails + len(list(self.spamEmailSizes.keys()))))
+        for size in self.hamEmailSizes.keys():
+            self.hamSizeProb[size] = ((self.hamEmailSizes[size] + 1) / (self.numHamEmails + len(list(self.hamEmailSizes.keys()))))
        
         self.hamDigitProb = self.numHamDigit / self.numHamWords
+        self.hamPhoneProb = self.numHamPhone + 1 / self.numHamWords + 2
         self.hamLetterProb = 1 - self.hamDigitProb
         self.spamDigitProb = self.numSpamDigit / self.numSpamWords
-        self.spamLetterProb = 1 - self.spamDigitProb      
-
+        self.spamPhoneProb = self.numSpamPhone + 1 / self.numSpamWords + 2
+        self.spamLetterProb = 1 - self.spamDigitProb 
+        
+    # def makeWordBagSmaller(self, wordBag):
+    #     l = wordBag.items()
+    #     lsorted = sorted(l, key = lambda l:l[1], reverse=True)
+    #     newWordBag = lsorted[0:int(len(lsorted) / 2)]
+    #     return dict(newWordBag)
+        
     def isSpam(self, text):
         spamProb = log(self.spamEmailProb)
         hamProb = log(self.hamEmailProb)
-        words = self.normalizeText(text)
-       
+        words = self.normalizeText(text)   
         for word in words:
             if word.isdigit():
-                spamProb += log(self.spamDigitProb)
-                hamProb += log(self.hamDigitProb)
+                if word.startswith('09'):
+                    spamProb += log(self.spamPhoneProb)
+                    hamProb += log(self.hamPhoneProb)
+                else:
+                    spamProb += log(self.spamDigitProb)
+                    hamProb += log(self.hamDigitProb)
             else:
                 spamProb += log(self.spamLetterProb)
                 hamProb += log(self.hamLetterProb)
@@ -94,11 +162,13 @@ class SpamDetector:
                     spamProb += log(self.spamWordsProb[word])
                 else:
                     spamProb += log( 1 / (self.numSpamWords + self.numDistinctSpamWords) )
-            
                 if word in self.hamWordsProb:
                     hamProb += log(self.hamWordsProb[word])
                 else:
                     hamProb += log( 1 / (self.numHamWords + self.numDistinctHamWords) )
+
+        spamProb += log(self.spamSizeProb[self.giveSizeInterval(len(words))])
+        hamProb += log(self.hamSizeProb[self.giveSizeInterval(len(words))])
         return spamProb >= hamProb
     
     def predict(self, testTexts):
@@ -139,7 +209,7 @@ class SpamDetector:
     
 
 data = readTrainTestData()
-trainPortion = int(0.75 * len(data))
+trainPortion = int(0.8 * len(data))
 trainData = data[0:trainPortion]
 testData = data[trainPortion+1 :]
 
