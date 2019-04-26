@@ -23,7 +23,8 @@ class SpamDetector:
         
         text = text.translate(str.maketrans('', '', punctuation))
         wordTokens = word_tokenize(text)
-        filteredWords = [w.lower() for w in wordTokens if not w in stopWords]
+        wordTokens = [w.lower() for w in wordTokens]
+        filteredWords = [w for w in wordTokens if not w in stopWords]
         stemmedWords = [stemmer.stem(w) for w in filteredWords]
         return stemmedWords
 
@@ -76,8 +77,6 @@ class SpamDetector:
         self.hamLetterProb = 1 - self.hamDigitProb
         self.spamDigitProb = self.numSpamDigit / self.numSpamWords
         self.spamLetterProb = 1 - self.spamDigitProb      
-        # s = max(self.hamWordsProb, key=self.hamWordsProb.get)
-        # print(s, self.hamWordsProb[s])
 
     def isSpam(self, text):
         spamProb = log(self.spamEmailProb)
@@ -137,12 +136,13 @@ class SpamDetector:
         print('Recall', recall, '%')
         print('Precision', precision, '%')
         print('Accuracy', accuracy, '%')
+    
 
 data = readTrainTestData()
 trainPortion = int(0.75 * len(data))
 trainData = data[0:trainPortion]
 testData = data[trainPortion+1 :]
 
-detector = SpamDetector(trainData, trainData)
+detector = SpamDetector(trainData, testData)
 detector.train()
 detector.test()
