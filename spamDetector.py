@@ -21,11 +21,29 @@ class SpamDetector:
         punctuation = string.punctuation
         stemmer = PorterStemmer()
         
-        text = text.translate(str.maketrans('', '', punctuation))
+        text = text.translate(str.maketrans(punctuation, '                                '))
         wordTokens = word_tokenize(text)
         wordTokens = [w.lower() for w in wordTokens]
         filteredWords = [w for w in wordTokens if not w in stopWords]
         stemmedWords = [stemmer.stem(w) for w in filteredWords]
+        return stemmedWords
+
+    def check(self, text):
+        stopWords = set(stopwords.words('english'))
+        punctuation = string.punctuation
+        stemmer = PorterStemmer()
+        print("________________________")
+        print(text)
+        text = text.translate(str.maketrans(punctuation, '                                '))        
+        # text = text.translate(str.maketrans('', '', punctuation))
+        print("PUNC: ", text)
+        wordTokens = word_tokenize(text)
+        wordTokens = [w.lower() for w in wordTokens]
+        filteredWords = [w for w in wordTokens if not w in stopWords]
+        print("FILTER: ", filteredWords)
+        stemmedWords = [stemmer.stem(w) for w in filteredWords]
+        print("STEM: ", stemmedWords)
+        print("_________________________")
         return stemmedWords
 
     def giveSizeInterval(self, size):
@@ -112,7 +130,6 @@ class SpamDetector:
         self.handleEmailSizes(hamEmailSizes, spamEmailSizes)
         self.calcProb()
 
-
     def calcProb(self):
         self.hamWordsProb, self.spamWordsProb, self.hamSizeProb, self.spamSizeProb = dict(), dict(), dict(), dict()
         numEmails = self.numHamEmails + self.numSpamEmails
@@ -131,12 +148,12 @@ class SpamDetector:
             self.hamSizeProb[size] = ((self.hamEmailSizes[size] + 1) / (self.numHamEmails + len(list(self.hamEmailSizes.keys()))))
        
         self.hamDigitProb = self.numHamDigit / self.numHamWords
-        self.hamPhoneProb = self.numHamPhone + 1 / self.numHamWords + 2
+        self.hamPhoneProb = ((self.numHamPhone + 1) / (self.numHamWords + 2))
         self.hamLetterProb = 1 - self.hamDigitProb
         self.spamDigitProb = self.numSpamDigit / self.numSpamWords
-        self.spamPhoneProb = self.numSpamPhone + 1 / self.numSpamWords + 2
+        self.spamPhoneProb = ((self.numSpamPhone + 1) / (self.numSpamWords + 2))
         self.spamLetterProb = 1 - self.spamDigitProb 
-        
+ 
     # def makeWordBagSmaller(self, wordBag):
     #     l = wordBag.items()
     #     lsorted = sorted(l, key = lambda l:l[1], reverse=True)
@@ -162,10 +179,12 @@ class SpamDetector:
                     spamProb += log(self.spamWordsProb[word])
                 else:
                     spamProb += log( 1 / (self.numSpamWords + self.numDistinctSpamWords) )
+                    # spamProb -= 10
                 if word in self.hamWordsProb:
                     hamProb += log(self.hamWordsProb[word])
                 else:
                     hamProb += log( 1 / (self.numHamWords + self.numDistinctHamWords) )
+                    # hamProb -= 10
 
         spamProb += log(self.spamSizeProb[self.giveSizeInterval(len(words))])
         hamProb += log(self.hamSizeProb[self.giveSizeInterval(len(words))])
@@ -192,6 +211,7 @@ class SpamDetector:
             elif result[i] == 'ham' and label == 'ham':
                 trueNegative += 1
             elif result[i] == 'spam' and label == 'ham':
+                # self.check(testTexts[i])                                
                 falsePositive += 1
             elif result[i] == 'ham' and label == 'spam':
                 falseNegative += 1
