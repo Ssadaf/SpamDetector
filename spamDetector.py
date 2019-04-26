@@ -28,7 +28,7 @@ class SpamDetector:
         return stemmedWords
 
     def train(self):
-        self.numSpamWords, self.numSpamEmails, self.numHamWords, self.numHamEmails = 0, 0, 0, 0
+        self.numSpamWords, self.numSpamEmails, self.numHamWords, self.numHamEmails, self.numSpamDigit, self.numHamDigit = 0, 0, 0, 0, 0, 0
         self.spamWords = dict()
         self.hamWords = dict()
         
@@ -45,10 +45,16 @@ class SpamDetector:
             for word in words:
                 if label == 'ham':
                     self.numHamWords += 1
-                    self.hamWords[word] = self.hamWords.get(word, 0) + 1
+                    if word.isdigit():
+                        self.numHamDigit += 1
+                    else:
+                        self.hamWords[word] = self.hamWords.get(word, 0) + 1     
                 else:
                     self.numSpamWords +=1
-                    self.spamWords[word] = self.spamWords.get(word, 0) + 1
+                    if word.isdigit():
+                        self.numSpamDigit += 1
+                    else:
+                        self.spamWords[word] = self.spamWords.get(word, 0) + 1                
         self.calcProb()
 
 
@@ -65,6 +71,13 @@ class SpamDetector:
             self.spamWordsProb[word] = ((self.spamWords[word] + 1) / (self.numSpamWords + self.numDistinctSpamWords))    
         for word in self.hamWords.keys():
             self.hamWordsProb[word] = ((self.hamWords[word] + 1) / (self.numHamWords + self.numDistinctHamWords))
+       
+        self.hamDigitProb = self.numHamDigit / self.numHamWords
+        self.hamLetterProb = 1 - self.hamDigitProb
+        self.spamDigitProb = self.numSpamDigit / self.numSpamWords
+        self.spamLetterProb = 1 - self.spamDigitProb      
+        # s = max(self.hamWordsProb, key=self.hamWordsProb.get)
+        # print(s, self.hamWordsProb[s])
 
     def isSpam(self, text):
         spamProb = log(self.spamEmailProb)
@@ -72,15 +85,21 @@ class SpamDetector:
         words = self.normalizeText(text)
        
         for word in words:
-            if word in self.spamWordsProb:
-                spamProb += log(self.spamWordsProb[word])
+            if word.isdigit():
+                spamProb += log(self.spamDigitProb)
+                hamProb += log(self.hamDigitProb)
             else:
-                spamProb += log( 1 / (self.numSpamWords + self.numDistinctSpamWords) )
-           
-            if word in self.hamWordsProb:
-                hamProb += log(self.hamWordsProb[word])
-            else:
-                hamProb += log( 1 / (self.numHamWords + self.numDistinctHamWords) )
+                spamProb += log(self.spamLetterProb)
+                hamProb += log(self.hamLetterProb)
+                if word in self.spamWordsProb:
+                    spamProb += log(self.spamWordsProb[word])
+                else:
+                    spamProb += log( 1 / (self.numSpamWords + self.numDistinctSpamWords) )
+            
+                if word in self.hamWordsProb:
+                    hamProb += log(self.hamWordsProb[word])
+                else:
+                    hamProb += log( 1 / (self.numHamWords + self.numDistinctHamWords) )
         return spamProb >= hamProb
     
     def predict(self, testTexts):
@@ -107,10 +126,10 @@ class SpamDetector:
                 falsePositive += 1
             elif result[i] == 'ham' and label == 'spam':
                 falseNegative += 1
-                
-        self.estimateTrainResult(truePositive, trueNegative, falsePositive, falseNegative)
 
-    def estimateTrainResult(self, truePositive, trueNegative, falsePositive, falseNegative):
+        self.estimateTestResult(truePositive, trueNegative, falsePositive, falseNegative)
+
+    def estimateTestResult(self, truePositive, trueNegative, falsePositive, falseNegative):
         recall = (truePositive / (truePositive + falseNegative)) * 100
         precision = (truePositive / (truePositive + falsePositive)) * 100
         accuracy = ((trueNegative + truePositive) / (trueNegative + truePositive + falseNegative + falsePositive)) * 100
@@ -124,6 +143,6 @@ trainPortion = int(0.75 * len(data))
 trainData = data[0:trainPortion]
 testData = data[trainPortion+1 :]
 
-detector = SpamDetector(trainData, testData)
+detector = SpamDetector(trainData, trainData)
 detector.train()
 detector.test()
