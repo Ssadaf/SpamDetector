@@ -1,12 +1,14 @@
 import csv
 import string
+import matplotlib.pyplot as plt
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer
 from math import log
 
-def readTrainTestData():
-    with open('data/train_test.csv', 'r') as f:
+
+def readData(path):
+    with open(path, 'r') as f:
         reader = csv.reader(f)
         trainTestData = list(reader)
     return trainTestData[1:]
@@ -104,29 +106,31 @@ class SpamDetector:
                 if label == 'ham':
                     self.numHamWords += 1
                     if word.isdigit():
-                        if word.startswith('09'):
-                            self.numHamPhone += 1
-                        else:
-                            self.numHamDigit += 1
+                        # if word.startswith('09'):
+                        #     self.numHamPhone += 1
+                        # else:
+                        self.numHamDigit += 1
                     else:
                         self.hamWords[word] = self.hamWords.get(word, 0) + 1     
                 else:
                     self.numSpamWords +=1
                     if word.isdigit():
-                        if word.startswith('09'):
-                            self.numSpamPhone += 1
-                        else:
-                            self.numSpamDigit += 1
+                        # if word.startswith('09'):
+                        #     self.numSpamPhone += 1
+                        # else:
+                        self.numSpamDigit += 1
                     else:
                         self.spamWords[word] = self.spamWords.get(word, 0) + 1               
                              
             if label == 'ham':
                 self.numHamEmails += 1
-                hamEmailSizes.append(len(words))
+                hamEmailSizes.append(len(text))
             else:
                 self.numSpamEmails += 1 
-                spamEmailSizes.append(len(words))
-
+                spamEmailSizes.append(len(text))
+        self.drawSizePlot(spamEmailSizes, hamEmailSizes)
+        #self.drawWords()
+        #self.numberOfDigits()
         self.handleEmailSizes(hamEmailSizes, spamEmailSizes)
         self.calcProb()
 
@@ -148,30 +152,77 @@ class SpamDetector:
             self.hamSizeProb[size] = ((self.hamEmailSizes[size] + 1) / (self.numHamEmails + len(list(self.hamEmailSizes.keys()))))
        
         self.hamDigitProb = self.numHamDigit / self.numHamWords
-        self.hamPhoneProb = ((self.numHamPhone + 1) / (self.numHamWords + 2))
+        # self.hamPhoneProb = ((self.numHamPhone + 1) / (self.numHamWords + 2))
         self.hamLetterProb = 1 - self.hamDigitProb
         self.spamDigitProb = self.numSpamDigit / self.numSpamWords
-        self.spamPhoneProb = ((self.numSpamPhone + 1) / (self.numSpamWords + 2))
+        # self.spamPhoneProb = ((self.numSpamPhone + 1) / (self.numSpamWords + 2))
         self.spamLetterProb = 1 - self.spamDigitProb 
  
-    # def makeWordBagSmaller(self, wordBag):
-    #     l = wordBag.items()
-    #     lsorted = sorted(l, key = lambda l:l[1], reverse=True)
-    #     newWordBag = lsorted[0:int(len(lsorted) / 2)]
-    #     return dict(newWordBag)
+    def makeWordBagSmaller(self, wordBag):
+        l = wordBag.items()
+        lsorted = sorted(l, key = lambda l:l[1], reverse=True)
+        newWordBag = lsorted[0:20]
+        return newWordBag
+
+    def drawWords(self):
+        spamTopTen = self.makeWordBagSmaller(self.spamWords)
+        keys = [item[0] for item in spamTopTen]
+        values = [item[1] for item in spamTopTen]
+        plt.barh(keys, values)
+        plt.xlabel("Word")
+        plt.ylabel("Frequency")
+        plt.title("Top 20 Frequent Words in Spams")
+
+        plt.show() 
+
+        hamTopTen = self.makeWordBagSmaller(self.hamWords)
+        keys = [item[0] for item in hamTopTen]
+        values = [item[1] for item in hamTopTen]
+        plt.barh(keys, values)
+        plt.xlabel("Word")
+        plt.ylabel("Frequency")
+        plt.title("Top 20 Frequent Words in Hams")
+
+        plt.show() 
+
+    def numberOfDigits(self):
+        keys = ["spam", "ham"]
+        values = [self.numSpamDigit, self.numHamDigit]
+        plt.bar(keys, values)
+        plt.xlabel("class")
+        plt.ylabel("Frequency")
+        plt.title("Occurance of Numbers")
+
+        plt.show()
+
+    def drawSizePlot(self, spamEmailSizes, hamEmailSizes):
+        plt.subplot(211)
+        plt.hist(spamEmailSizes,color = 'blue')
+        plt.xlabel("Size of Email")
+        plt.ylabel("Frequency")
+        plt.title("Size of Spam Emails")
         
+        plt.subplot(212)
+        plt.hist(hamEmailSizes, color = 'orange')
+        plt.xlabel("Size of Email")
+        plt.ylabel("Frequency")
+        plt.title("Size of Ham Emails")
+        
+        plt.show() 
+
+
     def isSpam(self, text):
         spamProb = log(self.spamEmailProb)
         hamProb = log(self.hamEmailProb)
         words = self.normalizeText(text)   
         for word in words:
             if word.isdigit():
-                if word.startswith('09'):
-                    spamProb += log(self.spamPhoneProb)
-                    hamProb += log(self.hamPhoneProb)
-                else:
-                    spamProb += log(self.spamDigitProb)
-                    hamProb += log(self.hamDigitProb)
+                # if word.startswith('09'):
+                #     spamProb += log(self.spamPhoneProb)
+                #     hamProb += log(self.hamPhoneProb)
+                # else:
+                spamProb += log(self.spamDigitProb)
+                hamProb += log(self.hamDigitProb)
             else:
                 spamProb += log(self.spamLetterProb)
                 hamProb += log(self.hamLetterProb)
@@ -186,8 +237,8 @@ class SpamDetector:
                     hamProb += log( 1 / (self.numHamWords + self.numDistinctHamWords) )
                     # hamProb -= 10
 
-        spamProb += log(self.spamSizeProb[self.giveSizeInterval(len(words))])
-        hamProb += log(self.hamSizeProb[self.giveSizeInterval(len(words))])
+        spamProb += log(self.spamSizeProb[self.giveSizeInterval(len(text))])
+        hamProb += log(self.hamSizeProb[self.giveSizeInterval(len(text))])
         return spamProb >= hamProb
     
     def predict(self, testTexts):
@@ -227,12 +278,28 @@ class SpamDetector:
         print('Precision', precision, '%')
         print('Accuracy', accuracy, '%')
     
+    def evaluate(self, data, outputFile):
+        texts = [item[1] for item in data]
+        ids = [item[0] for item in data]
+    
+        prediction = self.predict(texts)
+        results = [['id','type']]
+        for i in range(len(ids)):
+            results.append([ids[i], prediction[i]])
+        
+        with open(outputFile, 'w') as writeFile:
+            writer = csv.writer(writeFile)
+            writer.writerows(results)
+        writeFile.close()
 
-data = readTrainTestData()
-trainPortion = int(0.8 * len(data))
-trainData = data[0:trainPortion]
-testData = data[trainPortion+1 :]
+trainTestData = readData('data/train_test.csv')
+trainPortion = int(0.8 * len(trainTestData))
+trainData = trainTestData[0:trainPortion]
+testData = trainTestData[trainPortion+1 :]
 
 detector = SpamDetector(trainData, testData)
 detector.train()
 detector.test()
+
+evaluateData = readData('data/evaluate.csv')
+detector.evaluate(evaluateData, 'output.csv')
